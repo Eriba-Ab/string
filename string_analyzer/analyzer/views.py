@@ -2,84 +2,104 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
-
-from .models import AnalyzedString
-from .serializers import AnalyzedStringSerializer
-from .utils import parse_nl_query
-
+from .models import StringEntry
+from .serializers import StringEntrySerializer
+from .utils import analyze_string, parse_natural_query
 
 class StringListCreateView(APIView):
-	def get(self, request):
-		qp = request.query_params
-		filters = {}
-		try:
-			if qp.get('max_length') is not None:
-				filters['length__lte'] = int(qp.get('max_length'))
-			if 'word_count' in qp:
-				filters['word_count'] = int(qp.get('word_count'))
-		except (TypeError, ValueError):
-			return Response({'detail': 'Invalid filter values'}, status=status.HTTP_400_BAD_REQUEST)
+    def post(self, request):
+        value = request.data.get('value')
+        if value is None:
+            return Response({'error': 'Missing "value" field'}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(value, str):
+            return Response({'error': 'Invalid data type for "value"'}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
-		queryset = AnalyzedString.objects.filter(**{k: v for k, v in filters.items() if v is not None})
-		if 'contains_character' in qp:
-			ch = qp.get('contains_character')
-			queryset = [q for q in queryset if ch in q.character_frequency_map]
+        analysis = analyze_string(value)
+        if StringEntry.objects.filter(id=analysis['sha256_hash']).exists():
+            return Response({'error': 'String already exists'}, status=status.HTTP_409_CONFLICT)
 
-		serializer = AnalyzedStringSerializer(queryset, many=True)
-		return Response({
-			'data': serializer.data,
-			'count': len(serializer.data),
-			'filters_applied': qp
-		})
-
-	def post(self, request):
-		value = request.data.get('value')
-		if value is None:
-			return Response({'detail': 'Missing "value"'}, status=status.HTTP_400_BAD_REQUEST)
-		if not isinstance(value, str):
-			return Response({'detail': '"value" must be a string'}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
-		try:
-			obj = AnalyzedString.create_or_raise(value)
-		except ValueError:
-			return Response({'detail': 'String already exists'}, status=status.HTTP_409_CONFLICT)
-		serializer = AnalyzedStringSerializer(obj)
-		return Response(serializer.data, status=status.HTTP_201_CREATED)
+        entry = StringEntry.objects.create(
+            id=analysis['sha256_hash'],
+            value=value,
+            properties=analysis
+        )
+        return Response(StringEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
 
 
-class StringRetrieveDeleteView(APIView):
-	def get(self, request, string_value):
-		obj = get_object_or_404(AnalyzedString, value=string_value)
-		return Response(AnalyzedStringSerializer(obj).data)
+def get(self, request):
+    qs = StringEntry.objects.all()
+    params = request.query_params
+    try:
+        if 'is_palindrome' in params:
+            val = params['is_palindrome'].lower() == 'true'
+            qs = qs.filter(properties__is_palindrome=val)
+        if 'min_length' in params:
+            qs = [x for x in qs if x.properties['length']
+                  >= int(params['min_length'])]
+        if 'max_length' in params:
+            qs = [x for x in qs if x.properties['length']
+                  <= int(params['max_length'])]
+        if 'word_count' in params:
+            qs = [x for x in qs if x.properties['word_count']
+                  == int(params['word_count'])]
+        if 'contains_character' in params:
+            ch = params['contains_character']
+            qs = [x for x in qs if ch in x.value]
+    except Exception as e:
+        return Response({'error': 'Invalid query parameters'}, status=status.HTTP_400_BAD_REQUEST)
 
-	def delete(self, request, string_value):
-		obj = AnalyzedString.objects.filter(value=string_value).first()
-		if not obj:
-			return Response({'detail': 'String not found'}, status=status.HTTP_404_NOT_FOUND)
-		obj.delete()
-		return Response(status=status.HTTP_204_NO_CONTENT)
+    data = StringEntrySerializer(qs, many=True).data
+    return Response({
+        'data': data,
+        'count': len(data),
+        'filters_applied': request.query_params
+    }, status=status.HTTP_200_OK)
+
+
+class StringDetailView(APIView):
+    def get(self, request, string_value):
+        entry = StringEntry.objects.filter(value=string_value).first()
+        if not entry:
+            return Response({'error': 'String not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(StringEntrySerializer(entry).data)
+
+    def delete(self, request, string_value):
+        entry = StringEntry.objects.filter(value=string_value).first()
+        if not entry:
+            return Response({'error': 'String not found'}, status=status.HTTP_404_NOT_FOUND)
+        entry.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class NaturalLanguageFilterView(APIView):
 	def get(self, request):
-		q = request.query_params.get('query')
-		if not q:
-			return Response({'detail': 'Missing query'}, status=status.HTTP_400_BAD_REQUEST)
-		try:
-			parsed = parse_nl_query(q)
-		except ValueError:
-			return Response({'detail': 'Unable to parse natural language query'}, status=status.HTTP_400_BAD_REQUEST)
 
-		queryset = AnalyzedString.objects.all()
-		if 'is_palindrome' in parsed:
-			queryset = queryset.filter(is_palindrome=parsed['is_palindrome'])
-		if 'min_length' in parsed:
-			queryset = queryset.filter(length__gte=parsed['min_length'])
-		if 'contains_character' in parsed:
-			queryset = [x for x in queryset if parsed['contains_character'] in x.character_frequency_map]
 
-		serializer = AnalyzedStringSerializer(queryset, many=True)
+		query = request.query_params.get('query')
+		if not query:
+			return Response({'error': 'Missing query'}, status=status.HTTP_400_BAD_REQUEST)
+		filters = parse_natural_query(query)
+		if not filters:
+			return Response({'error': 'Unable to parse query'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+		qs = StringEntry.objects.all()
+		if 'is_palindrome' in filters:
+			qs = qs.filter(properties__is_palindrome=filters['is_palindrome'])
+		if 'word_count' in filters:
+			qs = [x for x in qs if x.properties['word_count'] == filters['word_count']]
+		if 'min_length' in filters:
+			qs = [x for x in qs if x.properties['length'] >= filters['min_length']]
+		if 'contains_character' in filters:
+			qs = [x for x in qs if filters['contains_character'] in x.value]
+
+
+		data = StringEntrySerializer(qs, many=True).data
 		return Response({
-			'data': serializer.data,
-			'count': len(serializer.data),
-			'interpreted_query': {'original': q, 'parsed_filters': parsed}
-		})
+    		'data': data,
+    		'count': len(data),
+    		'interpreted_query': {
+       			'original': query,
+        		'parsed_filters': filters
+    		}
+		}, status=status.HTTP_200_OK)
