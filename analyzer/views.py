@@ -26,34 +26,34 @@ class StringListCreateView(APIView):
         return Response(StringEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
 
 
-def get(self, request):
-    qs = StringEntry.objects.all()
-    params = request.query_params
-    try:
-        if 'is_palindrome' in params:
-            val = params['is_palindrome'].lower() == 'true'
-            qs = qs.filter(properties__is_palindrome=val)
-        if 'min_length' in params:
-            qs = [x for x in qs if x.properties['length']
-                  >= int(params['min_length'])]
-        if 'max_length' in params:
-            qs = [x for x in qs if x.properties['length']
-                  <= int(params['max_length'])]
-        if 'word_count' in params:
-            qs = [x for x in qs if x.properties['word_count']
-                  == int(params['word_count'])]
-        if 'contains_character' in params:
-            ch = params['contains_character']
-            qs = [x for x in qs if ch in x.value]
-    except Exception as e:
-        return Response({'error': 'Invalid query parameters'}, status=status.HTTP_400_BAD_REQUEST)
+    def get(self, request):
+        qs = StringEntry.objects.all()
+        params = request.query_params
+        try:
+            if 'is_palindrome' in params:
+                val = params['is_palindrome'].lower() == 'true'
+                qs = qs.filter(properties__is_palindrome=val)
+            if 'min_length' in params:
+                qs = [x for x in qs if x.properties['length']
+                    >= int(params['min_length'])]
+            if 'max_length' in params:
+                qs = [x for x in qs if x.properties['length']
+                    <= int(params['max_length'])]
+            if 'word_count' in params:
+                qs = [x for x in qs if x.properties['word_count']
+                    == int(params['word_count'])]
+            if 'contains_character' in params:
+                ch = params['contains_character']
+                qs = [x for x in qs if ch in x.value]
+        except Exception as e:
+            return Response({'error': 'Invalid query parameters'}, status=status.HTTP_400_BAD_REQUEST)
 
-    data = StringEntrySerializer(qs, many=True).data
-    return Response({
-        'data': data,
-        'count': len(data),
-        'filters_applied': request.query_params
-    }, status=status.HTTP_200_OK)
+        data = StringEntrySerializer(qs, many=True).data
+        return Response({
+            'data': data,
+            'count': len(data),
+            'filters_applied': request.query_params
+        }, status=status.HTTP_200_OK)
 
 
 class StringDetailView(APIView):

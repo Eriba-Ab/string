@@ -3,7 +3,8 @@ from .views import StringListCreateView, StringDetailView, NaturalLanguageFilter
 
 
 urlpatterns = [
-    path('strings', StringListCreateView.as_view()),
+    path("strings", StringListCreateView.as_view(), name="string-list-create"),
+    path("strings/filter-by-natural-language", NaturalLanguageFilterView.as_view(), name="string-nl-filter"),
     path('strings/<str:string_value>', StringDetailView.as_view()),
-    path('strings/filter-by-natural-language', NaturalLanguageFilterView.as_view()),
+    
 ]
