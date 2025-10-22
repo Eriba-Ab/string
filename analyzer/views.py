@@ -4,7 +4,7 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from .models import StringEntry
 from .serializers import StringEntrySerializer
-from .utils import analyze_string, parse_natural_query
+from .utils import analyze_string,  parse_natural_language_query
 
 class StringListCreateView(APIView):
     def post(self, request):
@@ -73,8 +73,6 @@ class StringDetailView(APIView):
 
 class NaturalLanguageFilterView(APIView):
 	def get(self, request):
-
-
 		query = request.query_params.get('query')
 		if not query:
 			return Response({'error': 'Missing query'}, status=status.HTTP_400_BAD_REQUEST)

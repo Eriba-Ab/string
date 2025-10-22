@@ -1,6 +1,6 @@
 import hashlib
 from collections import Counter
-
+import re
 
 def analyze_string(value: str):
     value_stripped = value.strip()
@@ -22,7 +22,7 @@ def analyze_string(value: str):
     }
 
 
-def parse_natural_query(query: str):
+def parse_natural_language_query(query: str):
     q = query.lower()
     filters = {}
     if 'palindromic' in q or 'palindrome' in q:

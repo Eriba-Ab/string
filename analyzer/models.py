@@ -1,5 +1,6 @@
 from django.db import models
-
+from django.utils import timezone
+from django.contrib.postgres.fields import JSONField  # For PostgreSQL
 
 class StringEntry(models.Model):
 	id = models.CharField(max_length=64, primary_key=True) # sha256 hash
